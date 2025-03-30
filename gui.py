@@ -1,86 +1,104 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.express as px
+from PIL import Image
 
-def main():
-    st.title("AusCycling Performance Analysis")
+# --- Page Config ---
+st.set_page_config(layout="wide", page_title="AusCycling Performance Pro")
+
+# --- User Profile Section (Top-Right) ---
+with st.sidebar:
+    st.header("User Profile")
+    profile_tab1, profile_tab2 = st.tabs(["My Profile", "Settings"])
     
-    # Rider Selection
-    st.sidebar.header("Select Riders")
-    riders = ["Rider 1", "Rider 2", "Rider 3", "Rider 4"]  # Placeholder
-    selected_riders = st.sidebar.multiselect("Choose riders to compare:", riders)
-    
-    # Physiological Inputs for Each Selected Rider
-    st.sidebar.header("Physiological Inputs")
-    rider_data = {}
-    for rider in selected_riders:
-        st.sidebar.subheader(f"{rider} Data")
-        rider_data[rider] = {
-            "Weight (kg)": st.sidebar.number_input(f"{rider} - Weight (kg)", min_value=40, max_value=120, value=70, key=f"weight_{rider}"),
-            "Power Output (W)": st.sidebar.number_input(f"{rider} - Power Output (W)", min_value=100, max_value=2000, value=250, key=f"power_{rider}"),
-            "Drag Coefficient (CdA)": st.sidebar.number_input(f"{rider} - Drag Coefficient (CdA)", min_value=0.1, max_value=0.4, value=0.25, key=f"cda_{rider}"),
-            "Rolling Resistance": st.sidebar.number_input(f"{rider} - Rolling Resistance", min_value=0.002, max_value=0.01, value=0.004, key=f"rr_{rider}"),
-            "Air Density (kg/m³)": st.sidebar.number_input(f"{rider} - Air Density (kg/m³)", min_value=1.0, max_value=1.3, value=1.225, key=f"air_{rider}"),
-            "Track Slope (%)": st.sidebar.slider(f"{rider} - Track Slope (%)", min_value=-5.0, max_value=5.0, value=0.0, key=f"slope_{rider}")
-        }
-    
-    
-    # File Upload for Athlete Data
-    uploaded_file = st.file_uploader("Upload Athlete Data (CSV, JSON, etc.)", type=["csv"])
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.success("File uploaded successfully!")
+    with profile_tab1:
+        # Profile picture upload
+        profile_pic = st.file_uploader("Profile Photo", type=["jpg", "png"])
+        if profile_pic:
+            img = Image.open(profile_pic)
+            st.image(img, width=100)
         
-        # Ensure required columns exist
-        if all(col in df.columns for col in ["Name", "CP", "W", "Pmax"]):
-            st.write("### Power Curve Visualization")
-            
-            t = np.linspace(1, 100, 100000)  # Time range
-            fig, ax = plt.subplots(figsize=(12, 6))
-            
-            for _, row in df.iterrows():
-                P = row['W'] / t + row['CP']
-                ax.plot(t, P, label=f"{row['Name']} - W={row['W']}, CP={row['CP']}")
-            
-            ax.set_xlabel("Time (t)")
-            ax.set_ylabel("Power (P)")
-            ax.set_title("Power Curve for Riders")
-            ax.legend()
-            ax.grid(True)
-            st.pyplot(fig)
-        else:
-            st.error("Uploaded file does not contain required columns: 'Name', 'CP', 'W', 'Pmax'")
+        # Bio info
+        st.text_input("Name", key="profile_name")
+        st.text_input("Email", key="profile_email")
+        st.text_input("Phone", key="profile_phone")
     
-    # Submit Button
-    if st.button("Submit"):
-        if not selected_riders:
-            st.warning("Please select at least one rider.")
-        else:
-            st.success("Processing data for selected riders...")
-            # Display entered data
-            st.write("### Entered Data for Selected Riders")
-            data = []
-            for rider, values in rider_data.items():
-                st.write(f"#### {rider}")
-                for key, value in values.items():
-                    st.write(f"{key}: {value}")
-                data.append([rider] + list(values.values()))
-            
-            # Convert data to DataFrame for visualization
-            columns = ["Rider"] + list(rider_data[selected_riders[0]].keys())
-            df = pd.DataFrame(data, columns=columns)
-            df.set_index("Rider", inplace=True)
-            
-            # Generate graphs
-            st.write("### Data Visualization")
-            for column in df.columns:
-                fig, ax = plt.subplots()
-                df[column].plot(kind='bar', ax=ax)
-                plt.xticks(rotation=45)
-                plt.ylabel(column)
-                plt.title(f"Comparison of {column} among Riders")
-                st.pyplot(fig)
+    with profile_tab2:
+        st.selectbox("Theme", ["Light", "Dark"], key="theme")
+        st.slider("Data Precision", 1, 10, 5, key="data_precision")
 
-if __name__ == "__main__":
-    main()
+# --- Main App Tabs ---
+tab1, tab2, tab3 = st.tabs(["Data Input", "Performance Analysis", "Optimization"])
+
+with tab1:
+    st.header("New Data Entry")
+    
+    # Simplified input form (no rider selection required)
+    with st.form("new_data_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            rider_name = st.text_input("Rider Name")
+            weight = st.number_input("Weight (kg)", min_value=40, max_value=120, value=70)
+            power = st.number_input("Power Output (W)", min_value=100, max_value=2000, value=250)
+        
+        with col2:
+            cda = st.number_input("Drag Coefficient (CdA)", min_value=0.1, max_value=0.4, value=0.25)
+            rr = st.number_input("Rolling Resistance", min_value=0.002, max_value=0.01, value=0.004)
+            slope = st.slider("Track Slope (%)", min_value=-5.0, max_value=5.0, value=0.0)
+        
+        if st.form_submit_button("Save Data"):
+            # Save to session state or database
+            st.success("Data saved!")
+
+with tab2:
+    st.header("Performance Analysis")
+    
+    # Visualization options
+    analysis_type = st.selectbox(
+        "Analysis Type",
+        ["Power Curve", "Fatigue Analysis", "Energy Expenditure"],
+        key="analysis_type"
+    )
+    
+    if analysis_type == "Power Curve":
+        # Your existing power curve visualization with Plotly
+        t = np.linspace(1, 100, 100000)
+        fig = px.line(title="Power Curve Analysis")
+        
+        # Add rider data to plot
+        # (You would replace this with your actual data)
+        fig.add_scatter(x=t, y=250 + 1500/t, name="Sample Rider 1")
+        fig.add_scatter(x=t, y=300 + 1200/t, name="Sample Rider 2")
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with tab3:
+    st.header("Optimization Model")
+    
+    model_type = st.radio(
+        "Select Model",
+        ["Light Optimization", "Pro Optimization"],
+        horizontal=True
+    )
+    
+    if model_type == "Light Optimization":
+        st.write("Basic optimization parameters")
+        # Add light optimization controls
+    else:
+        st.write("Advanced optimization parameters")
+        # Add pro optimization controls
+
+# --- File Upload Section ---
+st.sidebar.header("Data Import")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Athlete Data",
+    type=["csv"],
+    help="Upload CSV with columns: Name, CP, W, Pmax"
+)
+
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.session_state['athlete_data'] = df
+    st.sidebar.success("Data loaded successfully!")
