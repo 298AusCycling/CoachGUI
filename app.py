@@ -3,19 +3,61 @@
 import streamlit as st
 import pandas as pd
 import time
+import sqlite3
+import json
+from datetime import datetime
 from iteration import simulate_race
 
 st.title("Team Pursuit Race Simulator")
 
-# A place to store our “database” of past simulations
-if "simulation_history" not in st.session_state:
-    st.session_state["simulation_history"] = []
+# Connect to SQLite database
+conn = sqlite3.connect("simulations.db", check_same_thread=False)
+cursor = conn.cursor()
 
+# Create the simulations table if it doesn't exist
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS simulations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT,
+        chosen_athletes TEXT,
+        start_order TEXT,
+        switch_schedule TEXT,
+        peel_location INTEGER,
+        final_order TEXT,
+        final_time REAL,
+        final_distance REAL,
+        final_half_lap_count INTEGER,
+        W_rem TEXT
+    )
+""")
+conn.commit()
+
+# Drafting values remain the same
 drafting_percents = [1.0, 0.58, 0.52, 0.53]
 
 def switch_schedule_description(switch_schedule):
-    laps = [i+1 for i, v in enumerate(switch_schedule) if v == 1]
-    return laps
+    return [i+1 for i, v in enumerate(switch_schedule) if v == 1]
+
+def save_simulation_to_db(record):
+    cursor.execute("""
+        INSERT INTO simulations (
+            timestamp, chosen_athletes, start_order, switch_schedule,
+            peel_location, final_order, final_time, final_distance,
+            final_half_lap_count, W_rem
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.fromtimestamp(record["timestamp"]).isoformat(),
+        json.dumps(record["chosen_athletes"]),
+        json.dumps(record["start_order"]),
+        json.dumps(record["switch_schedule"]),
+        record["peel_location"],
+        json.dumps(record["final_order"]),
+        record["final_time"],
+        record["final_distance"],
+        record["final_half_lap_count"],
+        json.dumps(record["W_rem"])
+    ))
+    conn.commit()
 
 uploaded_file = st.file_uploader("Upload Performance Data Excel File", type=["xlsx"])
 
@@ -30,10 +72,24 @@ if uploaded_file:
         .astype(int)
         .tolist()
     )
-    chosen_athletes = st.segmented_control("Select 4 Athletes", options=available_athletes, selection_mode = 'multi', default=None, key = 1323)
+
+    chosen_athletes = st.segmented_control(
+        "Select 4 Athletes",
+        options=available_athletes,
+        selection_mode='multi',
+        default=None,
+        key=1323
+    )
     st.markdown(f"Selected Riders: {sorted(chosen_athletes)}.")
+
     if len(chosen_athletes) == 4:
-        start_order = st.segmented_control("Initial Rider Order", options=sorted(chosen_athletes), selection_mode = 'multi', default=None, key = 1231)
+        start_order = st.segmented_control(
+            "Initial Rider Order",
+            options=sorted(chosen_athletes),
+            selection_mode='multi',
+            default=None,
+            key=1231
+        )
         st.markdown(f"Initial Starting Order: {start_order}")
 
         st.subheader("Switch Schedule (32 half-laps)")
@@ -43,17 +99,16 @@ if uploaded_file:
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Switch (1 = switch after this half-lap)**")
-            for i in range(32):
+            for i in range(31):
                 val = st.checkbox(f"{i+1}", key=f"switch_{i}")
                 switch_schedule.append(1 if val else 0)
 
         with col2:
             st.markdown("**Peel (1 = peel here)**")
-            for i in range(32):
+            for i in range(31):
                 val = st.checkbox(f"{i+1}", key=f"peel_{i}")
                 peel_schedule.append(1 if val else 0)
 
-        # Find the first peel
         try:
             peel_location = peel_schedule.index(1)
         except ValueError:
@@ -69,7 +124,7 @@ if uploaded_file:
                         chosen_athletes=chosen_athletes,
                         start_order=start_order,
                         drafting_percents=drafting_percents,
-                        peel_location=peel_location + 1,  # Adjust if needed
+                        peel_location=peel_location + 1,
                         power_duration_df=power_duration_df,
                         df_athletes=df_athletes,
                         total_mass=70,
@@ -88,9 +143,6 @@ if uploaded_file:
                 for k, v in W_rem.items():
                     st.write(f"{k}: {v:.1f} J")
 
-                # ------------------------------
-                # Save this run to our "database"
-                # ------------------------------
                 simulation_record = {
                     "timestamp": time.time(),
                     "chosen_athletes": chosen_athletes,
@@ -103,36 +155,38 @@ if uploaded_file:
                     "final_half_lap_count": final_half_lap_count,
                     "W_rem": W_rem
                 }
-                st.session_state["simulation_history"].append(simulation_record)
-                st.info("Simulation saved in history!")
+                save_simulation_to_db(simulation_record)
+                st.info("Simulation saved to database!")
 
 # ------------------------------
-# 2) Display & manage all past simulations
+# Display & manage past simulations
 # ------------------------------
-st.header("Past Simulations")
+st.header("Past Simulations (Saved)")
 
-# If there's something in simulation_history, display them
-if len(st.session_state["simulation_history"]) == 0:
+cursor.execute("SELECT * FROM simulations ORDER BY id DESC")
+rows = cursor.fetchall()
+
+if not rows:
     st.write("No simulations saved yet.")
 else:
-    # We can display each simulation as a collapsible expander,
-    # or as a table or something else. Here’s an example:
-    for i, sim in enumerate(st.session_state["simulation_history"]):
-        with st.expander(f"Simulation {i+1} (timestamp: {sim['timestamp']})"):
-            st.write(f"**Riders:** {sim['chosen_athletes']}")
-            st.write(f"**Start Order:** {sim['start_order']}")
-            st.write(f"**Switch Schedule:** {sim['switch_schedule']}")
-            st.write(f"**Peel Location (0-based):** {sim['peel_location']}")
-            st.write(f"**Final Order:** {sim['final_order']}")
-            st.write(f"**Final Time:** {sim['final_time']:.2f} s")
-            st.write(f"**Final Distance:** {sim['final_distance']:.2f} m")
-            st.write(f"**Final Half Laps:** {sim['final_half_lap_count']}")
+    for row in rows:
+        sim_id, timestamp, chosen_athletes, start_order, switch_schedule, peel_location, final_order, final_time, final_distance, final_half_lap_count, W_rem = row
+
+        with st.expander(f"Simulation #{sim_id} ({timestamp})"):
+            st.write(f"**Riders:** {json.loads(chosen_athletes)}")
+            st.write(f"**Start Order:** {json.loads(start_order)}")
+            st.write(f"**Switch Schedule:** {json.loads(switch_schedule)}")
+            st.write(f"**Peel Location:** {peel_location}")
+            st.write(f"**Final Order:** {json.loads(final_order)}")
+            st.write(f"**Final Time:** {final_time:.2f} s")
+            st.write(f"**Final Distance:** {final_distance:.2f} m")
+            st.write(f"**Final Half Laps:** {final_half_lap_count}")
             st.write("**W′ Remaining:**")
-            for k, v in sim['W_rem'].items():
+            for k, v in json.loads(W_rem).items():
                 st.write(f"{k}: {v:.1f} J")
 
-            # 3) Delete button for each simulation
-            delete_button_key = f"delete_sim_{i}"
-            if st.button(f"Delete Simulation {i+1}", key=delete_button_key):
-                st.session_state["simulation_history"].pop(i)
+            if st.button(f"🗑️ Delete Simulation #{sim_id}", key=f"delete_{sim_id}"):
+                cursor.execute("DELETE FROM simulations WHERE id = ?", (sim_id,))
+                conn.commit()
+                st.success(f"Simulation #{sim_id} deleted.")
                 st.experimental_rerun()
