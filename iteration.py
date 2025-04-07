@@ -115,6 +115,7 @@ def power_to_time(power, Mtot, rho, AC, num_laps_till_switch, v0, t0):
         return l_func(t) - l_target
 
     result = root_scalar(objective, bracket=[1, 100], method='brentq')
+    
     return result.root if result.converged else np.nan
 
 # %%
