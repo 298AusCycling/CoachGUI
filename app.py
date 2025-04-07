@@ -24,7 +24,6 @@ if uploaded_file:
     if len(chosen_athletes) == 4:
         start_order = st.segmented_control("Initial Rider Order", options=sorted(chosen_athletes), selection_mode = 'multi', default=None, key = 1231)
         st.markdown(f"Initial Starting Order: {start_order}.")
-
         st.subheader("Switch Schedule (32 half-laps)")
         switch_schedule = []
         peel_schedule = []
@@ -51,7 +50,6 @@ if uploaded_file:
         
     
 
-
         if st.button("Simulate Race"):
             with st.spinner("Running simulation..."):
                 final_order, final_time, final_distance, final_half_lap_count, W_rem = simulate_race(
@@ -73,3 +71,5 @@ if uploaded_file:
             st.subheader("W′ Remaining per Rider:")
             for k, v in W_rem.items():
                 st.write(f"{k}: {v:.1f} J")
+
+
