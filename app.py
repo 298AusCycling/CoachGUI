@@ -158,9 +158,7 @@ if uploaded_file:
                 save_simulation_to_db(simulation_record)
                 st.info("Simulation saved to database!")
 
-# ------------------------------
-# Display & manage past simulations
-# ------------------------------
+
 st.header("Past Simulations (Saved)")
 
 cursor.execute("SELECT * FROM simulations ORDER BY id DESC")
